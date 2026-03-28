@@ -16,6 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Breaking Change: something
 
+### Added
+
+- Add bullet 1
+- Add bullet 3
+
+### Changed
+
+- Breaking Change: something
+- Breaking Change: something 2
+
 ## [6.10.0] - 2025-11-19
 
 ### Added
