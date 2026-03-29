@@ -73,4 +73,4 @@ jobs:
             --base main \
             --head "update-version-${{ steps.extract-version.outputs.next_version }}"
 
-          gh pr merge "update-version-${{ steps.extract-version.outputs.next_version }}" --auto --squash
+          gh pr merge "update-version-${{ steps.extract-version.outputs.next_version }}" --squash --delete-branch
