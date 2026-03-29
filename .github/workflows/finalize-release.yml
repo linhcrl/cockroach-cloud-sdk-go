@@ -67,9 +67,10 @@ jobs:
           - Updates version to ${{ steps.extract-version.outputs.next_version }}
           - Updates CHANGELOG.md, internal/spec/config.yaml, and README.md"
 
-          pr_url=$(gh pr create \
+          gh pr create \
             --title "Release v${{ steps.extract-version.outputs.next_version }}" \
             --body "$pr_body" \
             --base main \
-            --head "update-version-${{ steps.extract-version.outputs.next_version }}")
-          gh pr merge "$pr_url" --auto --squash
+            --head "update-version-${{ steps.extract-version.outputs.next_version }}"
+
+          gh pr merge "update-version-${{ steps.extract-version.outputs.next_version }}" --auto --squash
