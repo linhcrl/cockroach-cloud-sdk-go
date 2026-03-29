@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Automated release workflow that creates release PRs when `pending-deploy-*` branches are merged to main, updating the version number in `CHANGELOG.md`, `go.mod`, `internal/spec/config.yaml`, `README.md`, `docs/README.md`, and `pkg/client/configuration.go`
+
 ## [7.1.0] - 2026-04-14
 
 ### Added
