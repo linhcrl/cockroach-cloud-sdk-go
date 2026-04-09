@@ -7,40 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [7.3.0] - 2026-03-29
-
 ### Added
 
-- Something
-
-## [7.2.0] - 2026-03-29
-
-### Added
-
-- Something
-
-## [7.1.1] - 2026-03-29
-
-### Fixed
-
-- Random stuff
-
-## [7.1.0] - 2026-03-29
-
-### Changed
-
-- Random stuff
-- new
-
-## [7.0.0] - 2026-03-29
-
-### Added
-
-- Added automated release workflow that triggers after merging `pending-deploy-*` branches to create version bump PRs
-
-### Removed
-
-- Breaking Change: removed endpoint A
+- Added release workflow that auto-tags from CHANGELOG and dispatches
+  sdk-release events to ccloud-private. Requires a `CCLOUD_PRIVATE_DISPATCH_PAT`
+  repository secret (fine-grained PAT with contents:write on
+  cockroachdb/ccloud-private) and a corresponding `repository_dispatch`
+  workflow in ccloud-private to handle the `sdk-release` event
 
 ## [6.10.0] - 2025-11-19
 
