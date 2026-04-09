@@ -1,0 +1,50 @@
+name: Pending Deploy Check
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pending-deploy-check:
+    runs-on: ubuntu-latest
+    if: startsWith(github.head_ref, 'pending-deploy-')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run deployment check
+        id: check-deployment
+        env:
+          GITHUB_HEAD_REF: ${{ github.head_ref }}
+          MANAGED_SERVICE_TOKEN: ${{ secrets.MANAGED_SERVICE_TOKEN }}
+        run: |
+          chmod +x scripts/pending-deploy-check.sh
+          scripts/pending-deploy-check.sh
+
+      - name: Post failure comment and fail
+        if: steps.check-deployment.outputs.has_issues == 'true'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/post-failure-comment.sh
+          scripts/post-failure-comment.sh
+          source scripts/lib/logging.sh
+          log_error "Deployment check failed - see PR comment for details"
+          exit 1
+
+      - name: Summary
+        if: always()
+        run: |
+          source scripts/lib/logging.sh
+          if [ "${{ steps.check-deployment.outputs.has_issues }}" != "true" ]; then
+            log_info "All commits in pending deploy branch are deployed in managed-service"
+          else
+            log_info "Some commits are not deployed or potentially not deployed"
+          fi

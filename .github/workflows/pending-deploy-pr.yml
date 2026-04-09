@@ -1,0 +1,50 @@
+name: Pending Deploy PR
+
+on:
+  workflow_dispatch:
+    inputs:
+      timestamp:
+        description: 'Deployment timestamp'
+        required: true
+        type: string
+      commit_sha:
+        description: 'Deployed commit SHA'
+        required: true
+        type: string
+
+# Required permissions:
+# - contents:read for checking out code and reading branches/tags
+# - pull-requests:write for creating/updating PRs
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  pending-deploy-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0  # Need full history to compare branches and commits
+
+      - name: Run pending deploy PR workflow
+        id: create-pr
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          chmod +x scripts/pending-deploy-pr.sh
+          scripts/pending-deploy-pr.sh
+
+      - name: Summary
+        if: always()
+        run: |
+          source scripts/lib/logging.sh
+          if [ -z "${{ steps.create-pr.outputs.branch }}" ]; then
+            log_info "No pending deploy branches found"
+          elif [ "${{ steps.create-pr.outputs.has_commits }}" != "true" ]; then
+            log_info "Pending deploy branch has no new commits"
+          elif [ -n "${{ steps.create-pr.outputs.pr_url }}" ]; then
+            log_info "PR created or updated for pending deploy branch"
+          fi
