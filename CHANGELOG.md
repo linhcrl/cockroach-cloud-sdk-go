@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Something else
 - The first pending deploy
 - Added release workflow that auto-tags from CHANGELOG and dispatches
   sdk-release events to ccloud-private. Requires a `CCLOUD_PRIVATE_DISPATCH_PAT`
