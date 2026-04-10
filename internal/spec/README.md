@@ -39,3 +39,5 @@ The `openapi-generator` cli can also be used like:
 Use [debugging flags](https://openapi-generator.tech/docs/debugging/#templates) to inspect the template variables.
 
 To see all the JSON models passed to model and operation (api), include `--global-property debugModels,debugOperations`.
+
+New stuff

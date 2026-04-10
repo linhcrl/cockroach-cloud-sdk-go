@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   repository secret (fine-grained PAT with contents:write on
   cockroachdb/ccloud-private) and a corresponding `repository_dispatch`
   workflow in ccloud-private to handle the `sdk-release` event
+- Last
 
 ## [6.10.0] - 2025-11-19
 
