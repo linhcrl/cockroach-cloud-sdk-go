@@ -60,7 +60,8 @@ jobs:
         run: |
           # Initialize result files
           > not_deployed.txt
-          > potentially_not_deployed.txt
+          > missing_trailer.txt
+          > unexpected_status.txt
 
           # Process each commit
           while IFS='|' read -r sha subject; do
@@ -73,7 +74,7 @@ jobs:
             if [ -z "$ms_sha" ]; then
               # No trailer found - potentially not deployed
               echo "  No Managed-service-commit-SHA trailer found"
-              echo "$sha|$subject|missing-trailer|" >> potentially_not_deployed.txt
+              echo "$sha|$subject" >> missing_trailer.txt
               continue
             fi
 
@@ -96,12 +97,12 @@ jobs:
               echo "  Deployed"
             else
               # Unexpected output - potentially not deployed
-              echo "$sha|$subject|$ms_sha|$deploy_output" >> potentially_not_deployed.txt
+              echo "$sha|$subject|$ms_sha|$deploy_output" >> unexpected_status.txt
             fi
           done < commits.txt
 
           # Check if there are any issues
-          if [ -s not_deployed.txt ] || [ -s potentially_not_deployed.txt ]; then
+          if [ -s not_deployed.txt ] || [ -s missing_trailer.txt ] || [ -s unexpected_status.txt ]; then
             echo "Found commits that are not deployed or potentially not deployed"
             echo "has_issues=true" >> $GITHUB_OUTPUT
           else
@@ -135,7 +136,7 @@ jobs:
 
             while IFS='|' read -r sha subject ms_sha status; do
               cat >> comment.md <<EOF
-          - \`$sha\`: $subject
+          - $subject (\`$sha\`)
             - Managed-service SHA: \`$ms_sha\`
             - Status: **not deployed**
 
@@ -144,30 +145,47 @@ jobs:
           fi
 
           # Add potentially not deployed section
-          if [ -s potentially_not_deployed.txt ]; then
+          if [ -s missing_trailer.txt ] || [ -s unexpected_status.txt ]; then
             cat >> comment.md <<'EOF'
           ### Potentially Not Deployed Commits
 
-          These commits either lack a managed-service SHA trailer or have unexpected deployment status:
+          EOF
+
+            # Missing trailers section
+            if [ -s missing_trailer.txt ]; then
+              cat >> comment.md <<'EOF'
+          #### Missing Trailers
+
+          These commits lack a managed-service SHA trailer:
 
           EOF
 
-            while IFS='|' read -r sha subject ms_sha_or_reason output; do
-              if [ "$ms_sha_or_reason" = "missing-trailer" ]; then
+              while IFS='|' read -r sha subject; do
                 cat >> comment.md <<EOF
-          - \`$sha\`: $subject
-            - **Missing \`Managed-service-commit-SHA\` trailer**
+          - $subject (\`$sha\`)
 
           EOF
-              else
+              done < missing_trailer.txt
+            fi
+
+            # Unexpected status section
+            if [ -s unexpected_status.txt ]; then
+              cat >> comment.md <<'EOF'
+          #### Unexpected Deploy Status
+
+          These commits have unexpected deployment status:
+
+          EOF
+
+              while IFS='|' read -r sha subject ms_sha output; do
                 cat >> comment.md <<EOF
-          - \`$sha\`: $subject
-            - Managed-service SHA: \`$ms_sha_or_reason\`
+          - $subject (\`$sha\`)
+            - Managed-service SHA: \`$ms_sha\`
             - Unexpected output: \`$output\`
 
           EOF
-              fi
-            done < potentially_not_deployed.txt
+              done < unexpected_status.txt
+            fi
           fi
 
           cat >> comment.md <<'EOF'
@@ -202,3 +220,4 @@ jobs:
           else
             echo "Some commits are not deployed or potentially not deployed"
           fi
+
