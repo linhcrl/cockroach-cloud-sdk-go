@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Commit 3
 - Commit 2
 - Commit 1
 - Automated pending deploy branch management with two GitHub Actions workflows:
