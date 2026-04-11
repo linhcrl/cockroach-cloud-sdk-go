@@ -220,3 +220,4 @@ jobs:
           else
             echo "Some commits are not deployed or potentially not deployed"
           fi
+
