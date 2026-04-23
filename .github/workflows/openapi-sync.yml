@@ -211,6 +211,9 @@ jobs:
             # Regenerate client code
             echo "Running make generate-openapi-client"
             make generate-openapi-client
+
+            # Fix ownership of files created by docker (they're owned by root)
+            sudo chown -R $(id -u):$(id -g) internal/openapi-generator/ docs/
           fi
 
           # Check if there are any changes in working tree
