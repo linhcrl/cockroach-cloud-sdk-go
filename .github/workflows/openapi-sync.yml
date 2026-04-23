@@ -208,12 +208,10 @@ jobs:
             echo "Spec file changed, replacing $LOCAL_SPEC_PATH"
             mv "$LOCAL_SPEC_PATH.new" "$LOCAL_SPEC_PATH"
 
-            # Regenerate client code
+            # Regenerate client code (use sudo to handle docker-created files)
             echo "Running make generate-openapi-client"
-            make generate-openapi-client
-
-            # Fix ownership of files created by docker (they're owned by root)
-            sudo chown -R $(id -u):$(id -g) internal/openapi-generator/ docs/
+            sudo make generate-openapi-client
+            sudo chown -R $(id -u):$(id -g) internal/openapi-generator/ pkg/client/ docs/ README.md
           fi
 
           # Check if there are any changes in working tree
@@ -255,8 +253,13 @@ jobs:
         env:
           EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
         run: |
-          # Stage all changes
-          git add --all
+          # Stage only OpenAPI-generated files
+          git add internal/spec/openapi.json \
+                  internal/openapi-generator/api/openapi-modified.json \
+                  pkg/client/ \
+                  docs/ \
+                  README.md \
+                  CHANGELOG.md
 
           # Read commit message components from step outputs
           COMMIT_TITLE="${{ steps.claude.outputs.commit_title }}"
