@@ -365,17 +365,17 @@ jobs:
 
             # Update PR title and body
             gh pr edit "$EXISTING_SDK_PR_NUMBER" \
-              --repo "cockroachlabs/cockroach-cloud-sdk-go" \
+              --repo "linhcrl/cockroach-cloud-sdk-go" \
               --title "$PR_TITLE" \
               --body "$PR_DESCRIPTION"
 
-            echo "SDK PR updated: https://github.com/cockroachlabs/cockroach-cloud-sdk-go/pull/$EXISTING_SDK_PR_NUMBER"
+            echo "SDK PR updated: https://github.com/linhcrl/cockroach-cloud-sdk-go/pull/$EXISTING_SDK_PR_NUMBER"
           else
-            echo "Creating new SDK PR from $FORK_OWNER:$SDK_BRANCH to cockroachlabs/cockroach-cloud-sdk-go:$PENDING_DEPLOY_BRANCH"
+            echo "Creating new SDK PR from $FORK_OWNER:$SDK_BRANCH to linhcrl/cockroach-cloud-sdk-go:$PENDING_DEPLOY_BRANCH"
 
             # Create new PR
             gh pr create \
-              --repo "cockroachlabs/cockroach-cloud-sdk-go" \
+              --repo "linhcrl/cockroach-cloud-sdk-go" \
               --head "$FORK_OWNER:$SDK_BRANCH" \
               --base "$PENDING_DEPLOY_BRANCH" \
               --title "$PR_TITLE" \
@@ -395,7 +395,7 @@ jobs:
 
           # Merge the PR
           gh pr merge "$SDK_PR_NUMBER" \
-            --repo "cockroachlabs/cockroach-cloud-sdk-go" \
+            --repo "linhcrl/cockroach-cloud-sdk-go" \
             --squash \
             --auto
 
