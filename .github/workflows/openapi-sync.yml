@@ -149,9 +149,6 @@ jobs:
           FORK_OWNER="linhcrl"
           FORK_URL="https://x-access-token:${{ secrets.FORK_PUSH_TOKEN }}@github.com/$FORK_OWNER/cockroach-cloud-sdk-go.git"
 
-          # Debug: Check if token is present
-          echo "Token length: ${#FORK_URL}"
-
           echo "Adding fork remote"
           git remote add fork "$FORK_URL"
 
