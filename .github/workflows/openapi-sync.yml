@@ -128,7 +128,19 @@ jobs:
           service_account: vertex-ai-user@vertex-model-runners.iam.gserviceaccount.com
           workload_identity_provider: projects/108106229451/locations/global/workloadIdentityPools/vertex-ai-user/providers/vertex-ai-user
 
-      # Step 7: Configure Git and set up fork remote
+      # Step 7: Set up docker-compose compatibility
+      - name: Set up docker-compose compatibility
+        run: |
+          # GitHub Actions runners have 'docker compose' but not 'docker-compose'
+          # Create a wrapper script for compatibility
+          sudo tee /usr/local/bin/docker-compose > /dev/null <<'EOF'
+          #!/bin/sh
+          exec docker compose "$@"
+          EOF
+          sudo chmod +x /usr/local/bin/docker-compose
+          docker-compose version
+
+      # Step 8: Configure Git and set up fork remote
       - name: Configure Git and set up fork remote
         run: |
           git config user.name "github-actions[bot]"
@@ -140,7 +152,7 @@ jobs:
           echo "Adding fork remote"
           git remote add fork "$FORK_URL"
 
-      # Step 8: Determine or create SDK branch
+      # Step 9: Determine or create SDK branch
       - name: Determine or create SDK branch
         id: sdk-branch
         env:
@@ -169,7 +181,7 @@ jobs:
 
           echo "branch=$SDK_BRANCH" >> $GITHUB_OUTPUT
 
-      # Step 9: Sync OpenAPI spec and regenerate client
+      # Step 10: Sync OpenAPI spec and regenerate client
       - name: Sync OpenAPI spec and regenerate client
         id: sync
         env:
@@ -210,7 +222,7 @@ jobs:
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
 
-      # Step 10: Set up Claude CLI
+      # Step 11: Set up Claude CLI
       - name: Set up Claude CLI
         if: steps.sync.outputs.has_changes == 'true'
         run: |
@@ -223,7 +235,7 @@ jobs:
             echo "Claude CLI installed: $(claude --version)"
           fi
 
-      # Step 11: Update changelog and generate metadata with Claude
+      # Step 12: Update changelog and generate metadata with Claude
       - name: Update changelog and generate metadata with Claude
         if: steps.sync.outputs.has_changes == 'true'
         id: claude
@@ -234,7 +246,7 @@ jobs:
         run: |
           .github/scripts/invoke-claude-changelog.sh "$MANAGED_SERVICE_PR_URL" "$MANAGED_SERVICE_SHA" >> $GITHUB_OUTPUT
 
-      # Step 12: Commit changes (when there are changes)
+      # Step 13: Commit changes (when there are changes)
       - name: Commit changes
         if: steps.sync.outputs.has_changes == 'true'
         env:
@@ -259,7 +271,7 @@ jobs:
             git commit --message "$COMMIT_MSG"
           fi
 
-      # Step 13: Amend commit to add SHA trailer (for openapi-spec-merged with no changes)
+      # Step 14: Amend commit to add SHA trailer (for openapi-spec-merged with no changes)
       - name: Add SHA trailer to existing commit
         if: |
           env.EVENT_TYPE == 'openapi-spec-merged' &&
@@ -281,7 +293,7 @@ jobs:
             echo "Added SHA trailer to commit"
           fi
 
-      # Step 14: Push to fork
+      # Step 15: Push to fork
       - name: Push to fork
         if: steps.sync.outputs.has_changes == 'true' || env.EVENT_TYPE == 'openapi-spec-merged'
         env:
@@ -296,7 +308,7 @@ jobs:
             git push --set-upstream fork "$SDK_BRANCH"
           fi
 
-      # Step 15: Find or create pending deploy branch
+      # Step 16: Find or create pending deploy branch
       - name: Find or create pending deploy branch
         if: steps.sync.outputs.has_changes == 'true' && steps.find-sdk-pr.outputs.exists != 'true'
         id: pending-deploy
@@ -327,7 +339,7 @@ jobs:
 
           echo "branch=$PENDING_DEPLOY_BRANCH" >> $GITHUB_OUTPUT
 
-      # Step 16: Create or update PR
+      # Step 17: Create or update PR
       - name: Create or update PR
         if: steps.sync.outputs.has_changes == 'true'
         env:
@@ -366,7 +378,7 @@ jobs:
             echo "SDK PR created successfully"
           fi
 
-      # Step 17: Merge PR for openapi-spec-merged event
+      # Step 18: Merge PR for openapi-spec-merged event
       - name: Merge PR for openapi-spec-merged event
         if: env.EVENT_TYPE == 'openapi-spec-merged'
         env:
@@ -383,7 +395,7 @@ jobs:
 
           echo "SDK PR #$SDK_PR_NUMBER merged successfully"
 
-      # Step 18: Handle no changes scenario
+      # Step 19: Handle no changes scenario
       - name: Exit successfully if no changes
         if: |
           steps.sync.outputs.has_changes == 'false' &&
