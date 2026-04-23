@@ -1,0 +1,402 @@
+name: Sync OpenAPI Spec from Managed Service
+
+on:
+  repository_dispatch:
+    types:
+      - openapi-spec-changed
+      - openapi-spec-merged
+  workflow_dispatch:
+    inputs:
+      event_type:
+        description: 'Event type (openapi-spec-changed or openapi-spec-merged)'
+        required: true
+        type: choice
+        options:
+          - openapi-spec-changed
+          - openapi-spec-merged
+      pr_url:
+        description: 'Managed-service PR URL'
+        required: true
+        type: string
+      sha:
+        description: 'Managed-service commit SHA (required for merged events)'
+        required: false
+        type: string
+
+# Required permissions for the workflow
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+
+jobs:
+  sync-openapi:
+    runs-on: ubuntu-latest
+    env:
+      EVENT_TYPE: ${{ github.event.action || github.event.inputs.event_type }}
+      MANAGED_SERVICE_PR_URL: ${{ github.event.client_payload.pr_url || github.event.inputs.pr_url }}
+      MANAGED_SERVICE_SHA: ${{ github.event.client_payload.sha || github.event.inputs.sha }}
+    steps:
+      # Step 1: Validate event payload
+      - name: Validate event payload
+        run: |
+          if [[ -z "$MANAGED_SERVICE_PR_URL" ]]; then
+            echo "Error: pr_url is required in event payload"
+            exit 1
+          fi
+
+          if [[ "$EVENT_TYPE" == "openapi-spec-merged" ]]; then
+            if [[ -z "$MANAGED_SERVICE_SHA" ]]; then
+              echo "Error: sha is required for openapi-spec-merged event"
+              exit 1
+            fi
+          fi
+
+          echo "Event validation passed"
+          echo "Event type: $EVENT_TYPE"
+          echo "PR URL: $MANAGED_SERVICE_PR_URL"
+          echo "SHA: $MANAGED_SERVICE_SHA"
+
+      # Step 2: Resolve managed-service PR metadata from pr_url
+      - name: Resolve managed-service PR metadata
+        id: ms-pr
+        env:
+          GH_TOKEN: ${{ secrets.MANAGED_SERVICE_READ_TOKEN }}
+        run: |
+          # Extract owner, repo, and PR number from URL
+          # Expected format: https://github.com/cockroachlabs/managed-service/pull/123
+          if [[ ! "$MANAGED_SERVICE_PR_URL" =~ github\.com/([^/]+)/([^/]+)/pull/([0-9]+) ]]; then
+            echo "Error: Invalid PR URL format: $MANAGED_SERVICE_PR_URL"
+            exit 1
+          fi
+
+          MS_OWNER="${BASH_REMATCH[1]}"
+          MS_REPO="${BASH_REMATCH[2]}"
+          MS_PR_NUMBER="${BASH_REMATCH[3]}"
+
+          echo "Managed-service PR: $MS_OWNER/$MS_REPO#$MS_PR_NUMBER"
+
+          # Get PR metadata using GitHub API
+          PR_DATA=$(gh api "repos/$MS_OWNER/$MS_REPO/pulls/$MS_PR_NUMBER")
+
+          MS_HEAD_BRANCH=$(echo "$PR_DATA" | jq --raw-output '.head.ref')
+
+          if [[ -z "$MS_HEAD_BRANCH" || "$MS_HEAD_BRANCH" == "null" ]]; then
+            echo "Error: Could not resolve head branch for $MANAGED_SERVICE_PR_URL"
+            exit 1
+          fi
+
+          echo "Managed-service head branch: $MS_HEAD_BRANCH"
+
+          # Set outputs
+          echo "owner=$MS_OWNER" >> $GITHUB_OUTPUT
+          echo "repo=$MS_REPO" >> $GITHUB_OUTPUT
+          echo "head_branch=$MS_HEAD_BRANCH" >> $GITHUB_OUTPUT
+
+      # Step 3: Checkout repository (needed before running scripts)
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      # Step 4: Find corresponding SDK PR by searching for trailer
+      - name: Find corresponding SDK PR
+        id: find-sdk-pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e  # Don't exit on error
+          SCRIPT_OUTPUT=$(.github/scripts/find-sdk-pr.sh "$MANAGED_SERVICE_PR_URL" 2>&1)
+          SCRIPT_EXIT_CODE=$?
+          set -e
+
+          if [[ $SCRIPT_EXIT_CODE -eq 0 && -n "$SCRIPT_OUTPUT" ]]; then
+            echo "$SCRIPT_OUTPUT" >> $GITHUB_OUTPUT
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            # No SDK PR found
+            if [[ "$EVENT_TYPE" == "openapi-spec-merged" ]]; then
+              echo "Error: No SDK PR found for openapi-spec-merged event"
+              exit 1
+            fi
+            # For openapi-spec-changed, not finding a PR is expected (we'll create one)
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Step 5: Set up Go
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      # Step 6: Authenticate to Google Cloud (Vertex AI)
+      - name: Authenticate to Google Cloud (Vertex AI)
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: vertex-model-runners
+          service_account: vertex-ai-user@vertex-model-runners.iam.gserviceaccount.com
+          workload_identity_provider: projects/108106229451/locations/global/workloadIdentityPools/vertex-ai-user/providers/vertex-ai-user
+
+      # Step 7: Configure Git and set up fork remote
+      - name: Configure Git and set up fork remote
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          FORK_OWNER="linhcrl"
+          FORK_URL="https://x-access-token:${{ secrets.FORK_PUSH_TOKEN }}@github.com/$FORK_OWNER/${{ github.event.repository.name }}.git"
+
+          echo "Adding fork remote"
+          git remote add fork "$FORK_URL"
+
+      # Step 8: Determine or create SDK branch
+      - name: Determine or create SDK branch
+        id: sdk-branch
+        env:
+          EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
+          EXISTING_SDK_PR_BRANCH: ${{ steps.find-sdk-pr.outputs.sdk_pr_branch }}
+        run: |
+          if [[ "$EXISTING_SDK_PR_EXISTS" == "true" ]]; then
+            # Use existing PR branch
+            SDK_BRANCH="$EXISTING_SDK_PR_BRANCH"
+            echo "Using existing SDK PR branch: $SDK_BRANCH"
+
+            # Check out the branch from fork
+            git fetch fork "$SDK_BRANCH" || {
+              echo "Error: Could not fetch branch $SDK_BRANCH from fork"
+              exit 1
+            }
+            git checkout -B "$SDK_BRANCH" "fork/$SDK_BRANCH"
+          else
+            # Create new branch with timestamp
+            TIMESTAMP=$(date --utc +%Y%m%d-%H%M%S)
+            SDK_BRANCH="openapi-spec-change-$TIMESTAMP"
+            echo "Creating new SDK branch: $SDK_BRANCH"
+
+            git checkout -b "$SDK_BRANCH"
+          fi
+
+          echo "branch=$SDK_BRANCH" >> $GITHUB_OUTPUT
+
+      # Step 9: Sync OpenAPI spec and regenerate client
+      - name: Sync OpenAPI spec and regenerate client
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.MANAGED_SERVICE_READ_TOKEN }}
+          MS_OWNER: ${{ steps.ms-pr.outputs.owner }}
+          MS_REPO: ${{ steps.ms-pr.outputs.repo }}
+          MS_HEAD_BRANCH: ${{ steps.ms-pr.outputs.head_branch }}
+        run: |
+          SPEC_PATH_IN_MS="console/ui/cc-console/assets/docs/api/latest/openapi.json"
+          LOCAL_SPEC_PATH="internal/spec/openapi.json"
+
+          echo "Fetching openapi.json from $MS_OWNER/$MS_REPO branch $MS_HEAD_BRANCH"
+
+          # Fetch the spec file from managed-service PR branch using GitHub API
+          gh api "repos/$MS_OWNER/$MS_REPO/contents/$SPEC_PATH_IN_MS?ref=$MS_HEAD_BRANCH" \
+            --jq '.content' | base64 --decode > "$LOCAL_SPEC_PATH.new"
+
+          # Check if the spec changed
+          if cmp --silent "$LOCAL_SPEC_PATH" "$LOCAL_SPEC_PATH.new"; then
+            echo "No changes to $LOCAL_SPEC_PATH"
+            rm "$LOCAL_SPEC_PATH.new"
+          else
+            echo "Spec file changed, replacing $LOCAL_SPEC_PATH"
+            mv "$LOCAL_SPEC_PATH.new" "$LOCAL_SPEC_PATH"
+
+            # Regenerate client code
+            echo "Running make generate-openapi-client"
+            make generate-openapi-client
+          fi
+
+          # Check if there are any changes in working tree
+          if [[ -z "$(git status --porcelain)" ]]; then
+            echo "No changes after sync and regeneration"
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "Changes detected after sync and regeneration"
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+
+      # Step 10: Set up Claude CLI
+      - name: Set up Claude CLI
+        if: steps.sync.outputs.has_changes == 'true'
+        run: |
+          if command -v roachdev >/dev/null; then
+            printf '#!/bin/sh\nexec roachdev claude -- "$@"\n' > /usr/local/bin/claude
+            chmod +x /usr/local/bin/claude
+            echo "Claude CLI: using roachdev wrapper"
+          else
+            curl --fail --silent --show-error --location https://claude.ai/install.sh | bash -s -- "latest"
+            echo "Claude CLI installed: $(claude --version)"
+          fi
+
+      # Step 11: Update changelog and generate metadata with Claude
+      - name: Update changelog and generate metadata with Claude
+        if: steps.sync.outputs.has_changes == 'true'
+        id: claude
+        env:
+          CLAUDE_CODE_USE_VERTEX: "1"
+          ANTHROPIC_VERTEX_PROJECT_ID: vertex-model-runners
+          CLOUD_ML_REGION: us-east5
+        run: |
+          .github/scripts/invoke-claude-changelog.sh "$MANAGED_SERVICE_PR_URL" "$MANAGED_SERVICE_SHA" >> $GITHUB_OUTPUT
+
+      # Step 12: Commit changes (when there are changes)
+      - name: Commit changes
+        if: steps.sync.outputs.has_changes == 'true'
+        env:
+          EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
+        run: |
+          # Stage all changes
+          git add --all
+
+          # Read commit message components from step outputs
+          COMMIT_TITLE="${{ steps.claude.outputs.commit_title }}"
+          COMMIT_BODY="${{ steps.claude.outputs.commit_body }}"
+
+          # Combine title and body
+          COMMIT_MSG=$(printf "%s\n\n%s" "$COMMIT_TITLE" "$COMMIT_BODY")
+
+          # Create new commit or amend existing
+          if [[ "$EXISTING_SDK_PR_EXISTS" == "true" ]]; then
+            echo "Amending existing commit"
+            git commit --amend --message "$COMMIT_MSG"
+          else
+            echo "Creating new commit"
+            git commit --message "$COMMIT_MSG"
+          fi
+
+      # Step 13: Amend commit to add SHA trailer (for openapi-spec-merged with no changes)
+      - name: Add SHA trailer to existing commit
+        if: |
+          env.EVENT_TYPE == 'openapi-spec-merged' &&
+          steps.sync.outputs.has_changes == 'false'
+        run: |
+          echo "No changes detected, but adding SHA trailer to existing commit"
+
+          # Get current commit message
+          CURRENT_COMMIT_MSG=$(git log -1 --format=%B)
+
+          # Check if SHA trailer already exists
+          if echo "$CURRENT_COMMIT_MSG" | grep -q "Managed-service-commit-SHA: $MANAGED_SERVICE_SHA"; then
+            echo "SHA trailer already exists in commit"
+          else
+            # Add SHA trailer after the pr_url trailer
+            NEW_COMMIT_MSG=$(printf "%s\nManaged-service-commit-SHA: %s" "$CURRENT_COMMIT_MSG" "$MANAGED_SERVICE_SHA")
+
+            git commit --amend --message "$NEW_COMMIT_MSG"
+            echo "Added SHA trailer to commit"
+          fi
+
+      # Step 14: Push to fork
+      - name: Push to fork
+        if: steps.sync.outputs.has_changes == 'true' || env.EVENT_TYPE == 'openapi-spec-merged'
+        env:
+          SDK_BRANCH: ${{ steps.sdk-branch.outputs.branch }}
+          EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
+        run: |
+          if [[ "$EXISTING_SDK_PR_EXISTS" == "true" ]] || [[ "$EVENT_TYPE" == "openapi-spec-merged" ]]; then
+            echo "Force-pushing to existing branch: $SDK_BRANCH"
+            git push --force-with-lease fork "$SDK_BRANCH"
+          else
+            echo "Pushing new branch: $SDK_BRANCH"
+            git push --set-upstream fork "$SDK_BRANCH"
+          fi
+
+      # Step 15: Find or create pending deploy branch
+      - name: Find or create pending deploy branch
+        if: steps.sync.outputs.has_changes == 'true' && steps.find-sdk-pr.outputs.exists != 'true'
+        id: pending-deploy
+        run: |
+          echo "Looking for active pending deploy branch..."
+
+          # List all branches matching pending-deploy-* pattern
+          PENDING_BRANCHES=$(git ls-remote --heads origin 'refs/heads/pending-deploy-*' | \
+            awk '{print $2}' | \
+            sed 's|refs/heads/||' | \
+            sort --reverse)
+
+          if [[ -n "$PENDING_BRANCHES" ]]; then
+            # Use the latest (most recent timestamp)
+            PENDING_DEPLOY_BRANCH=$(echo "$PENDING_BRANCHES" | head --lines=1)
+            echo "Found existing pending deploy branch: $PENDING_DEPLOY_BRANCH"
+          else
+            # Create new pending deploy branch
+            TIMESTAMP=$(date --utc +%Y%m%d-%H%M%S)
+            PENDING_DEPLOY_BRANCH="pending-deploy-$TIMESTAMP"
+            echo "Creating new pending deploy branch: $PENDING_DEPLOY_BRANCH"
+
+            # Create branch from main
+            git fetch origin main
+            git branch "$PENDING_DEPLOY_BRANCH" origin/main
+            git push origin "$PENDING_DEPLOY_BRANCH"
+          fi
+
+          echo "branch=$PENDING_DEPLOY_BRANCH" >> $GITHUB_OUTPUT
+
+      # Step 16: Create or update PR
+      - name: Create or update PR
+        if: steps.sync.outputs.has_changes == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_BRANCH: ${{ steps.sdk-branch.outputs.branch }}
+          EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
+          EXISTING_SDK_PR_NUMBER: ${{ steps.find-sdk-pr.outputs.sdk_pr_number }}
+          PENDING_DEPLOY_BRANCH: ${{ steps.pending-deploy.outputs.branch }}
+        run: |
+          PR_TITLE="${{ steps.claude.outputs.pr_title }}"
+          PR_DESCRIPTION="${{ steps.claude.outputs.pr_description }}"
+
+          FORK_OWNER="linhcrl"
+
+          if [[ "$EXISTING_SDK_PR_EXISTS" == "true" ]]; then
+            echo "Updating existing SDK PR #$EXISTING_SDK_PR_NUMBER"
+
+            # Update PR title and body
+            gh pr edit "$EXISTING_SDK_PR_NUMBER" \
+              --repo "${{ github.repository }}" \
+              --title "$PR_TITLE" \
+              --body "$PR_DESCRIPTION"
+
+            echo "SDK PR updated: https://github.com/${{ github.repository }}/pull/$EXISTING_SDK_PR_NUMBER"
+          else
+            echo "Creating new SDK PR from $FORK_OWNER:$SDK_BRANCH to ${{ github.repository }}:$PENDING_DEPLOY_BRANCH"
+
+            # Create new PR
+            gh pr create \
+              --repo "${{ github.repository }}" \
+              --head "$FORK_OWNER:$SDK_BRANCH" \
+              --base "$PENDING_DEPLOY_BRANCH" \
+              --title "$PR_TITLE" \
+              --body "$PR_DESCRIPTION"
+
+            echo "SDK PR created successfully"
+          fi
+
+      # Step 17: Merge PR for openapi-spec-merged event
+      - name: Merge PR for openapi-spec-merged event
+        if: env.EVENT_TYPE == 'openapi-spec-merged'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SDK_PR_NUMBER: ${{ steps.find-sdk-pr.outputs.sdk_pr_number }}
+        run: |
+          echo "Merging SDK PR #$SDK_PR_NUMBER for openapi-spec-merged event"
+
+          # Merge the PR
+          gh pr merge "$SDK_PR_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --squash \
+            --auto
+
+          echo "SDK PR #$SDK_PR_NUMBER merged successfully"
+
+      # Step 18: Handle no changes scenario
+      - name: Exit successfully if no changes
+        if: |
+          steps.sync.outputs.has_changes == 'false' &&
+          env.EVENT_TYPE != 'openapi-spec-merged'
+        run: |
+          echo "No changes detected after syncing OpenAPI spec and regenerating client"
+          echo "Nothing to commit or update"
