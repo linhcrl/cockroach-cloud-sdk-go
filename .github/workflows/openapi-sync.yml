@@ -149,15 +149,11 @@ jobs:
           FORK_OWNER="linhcrl"
           FORK_URL="https://x-access-token:${{ secrets.FORK_PUSH_TOKEN }}@github.com/$FORK_OWNER/cockroach-cloud-sdk-go.git"
 
-          # Debug: Check if token is present (show first few chars only)
-          echo "Fork URL (masked): https://x-access-token:***@github.com/$FORK_OWNER/cockroach-cloud-sdk-go.git"
+          # Debug: Check if token is present
           echo "Token length: ${#FORK_URL}"
 
           echo "Adding fork remote"
           git remote add fork "$FORK_URL"
-
-          # Verify remote was added
-          git remote -v
 
       # Step 9: Determine or create SDK branch
       - name: Determine or create SDK branch
