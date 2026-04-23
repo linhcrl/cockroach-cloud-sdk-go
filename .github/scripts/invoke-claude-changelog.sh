@@ -70,7 +70,7 @@ claude --print \
   }
 
 # Extract result text from JSON
-RESULT_TEXT=$(jq --raw-output '.result_text // empty' "$OUTPUT_FILE")
+RESULT_TEXT=$(jq --raw-output '.result // empty' "$OUTPUT_FILE")
 
 if [[ -z "${RESULT_TEXT:-}" ]]; then
   echo "Error: Claude produced empty result" >&2
