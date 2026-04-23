@@ -76,22 +76,12 @@ jobs:
 
           echo "Managed-service PR: $MS_OWNER/$MS_REPO#$MS_PR_NUMBER"
 
-          # Get PR metadata using GitHub API
-          PR_DATA=$(gh api "repos/$MS_OWNER/$MS_REPO/pulls/$MS_PR_NUMBER")
-
-          MS_HEAD_BRANCH=$(echo "$PR_DATA" | jq --raw-output '.head.ref')
-
-          if [[ -z "$MS_HEAD_BRANCH" || "$MS_HEAD_BRANCH" == "null" ]]; then
-            echo "Error: Could not resolve head branch for $MANAGED_SERVICE_PR_URL"
-            exit 1
-          fi
-
-          echo "Managed-service head branch: $MS_HEAD_BRANCH"
+          echo "Managed-service PR: $MS_OWNER/$MS_REPO#$MS_PR_NUMBER"
 
           # Set outputs
           echo "owner=$MS_OWNER" >> $GITHUB_OUTPUT
           echo "repo=$MS_REPO" >> $GITHUB_OUTPUT
-          echo "head_branch=$MS_HEAD_BRANCH" >> $GITHUB_OUTPUT
+          echo "pr_number=$MS_PR_NUMBER" >> $GITHUB_OUTPUT
 
       # Step 3: Checkout repository (needed before running scripts)
       - name: Checkout repository
@@ -186,15 +176,16 @@ jobs:
           GH_TOKEN: ${{ secrets.MANAGED_SERVICE_READ_TOKEN }}
           MS_OWNER: ${{ steps.ms-pr.outputs.owner }}
           MS_REPO: ${{ steps.ms-pr.outputs.repo }}
-          MS_HEAD_BRANCH: ${{ steps.ms-pr.outputs.head_branch }}
+          MS_PR_NUMBER: ${{ steps.ms-pr.outputs.pr_number }}
         run: |
           SPEC_PATH_IN_MS="console/ui/cc-console/assets/docs/api/latest/openapi.json"
           LOCAL_SPEC_PATH="internal/spec/openapi.json"
 
-          echo "Fetching openapi.json from $MS_OWNER/$MS_REPO branch $MS_HEAD_BRANCH"
+          echo "Fetching openapi.json from $MS_OWNER/$MS_REPO PR #$MS_PR_NUMBER"
 
-          # Fetch the spec file from managed-service PR branch using GitHub API
-          gh api "repos/$MS_OWNER/$MS_REPO/contents/$SPEC_PATH_IN_MS?ref=$MS_HEAD_BRANCH" \
+          # Fetch the spec file from managed-service PR using the PR ref
+          # This works even if the PR is from a fork
+          gh api "repos/$MS_OWNER/$MS_REPO/contents/$SPEC_PATH_IN_MS?ref=refs/pull/$MS_PR_NUMBER/head" \
             --jq '.content' | base64 --decode > "$LOCAL_SPEC_PATH.new"
 
           # Check if the spec changed
