@@ -147,8 +147,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          FORK_OWNER="linhcrl"
-          FORK_URL="https://x-access-token:${{ secrets.FORK_PUSH_TOKEN }}@github.com/$FORK_OWNER/cockroach-cloud-sdk-go.git"
+          FORK_URL="https://github.com/linhcrl/cockroach-cloud-sdk-go.git"
 
           echo "Adding fork remote"
           git remote add fork "$FORK_URL"
@@ -306,7 +305,13 @@ jobs:
         env:
           SDK_BRANCH: ${{ steps.sdk-branch.outputs.branch }}
           EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
+          GIT_ASKPASS: ${{ github.workspace }}/.github/scripts/git-askpass.sh
+          GIT_FORK_USER: linhcrl
+          GIT_FORK_PASSWORD: ${{ secrets.FORK_PUSH_TOKEN }}
+          GIT_TERMINAL_PROMPT: 0
         run: |
+          chmod +x "$GIT_ASKPASS"
+
           if [[ "$EXISTING_SDK_PR_EXISTS" == "true" ]] || [[ "$EVENT_TYPE" == "openapi-spec-merged" ]]; then
             echo "Force-pushing to existing branch: $SDK_BRANCH"
             git push --force-with-lease fork "$SDK_BRANCH"
