@@ -89,6 +89,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ github.token }}
+          persist-credentials: false
 
       # Step 4: Find corresponding SDK PR by searching for trailer
       - name: Find corresponding SDK PR
@@ -145,9 +146,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Clear credential helper set by actions/checkout to use token in URL
-          git config --unset-all http.https://github.com/.extraheader || true
 
           FORK_OWNER="linhcrl"
           FORK_URL="https://x-access-token:${{ secrets.FORK_PUSH_TOKEN }}@github.com/$FORK_OWNER/cockroach-cloud-sdk-go.git"
