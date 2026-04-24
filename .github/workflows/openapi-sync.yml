@@ -89,6 +89,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ github.token }}
+          persist-credentials: false
 
       # Step 4: Find corresponding SDK PR by searching for trailer
       - name: Find corresponding SDK PR
@@ -323,13 +324,14 @@ jobs:
       - name: Find or create pending deploy branch
         if: steps.sync.outputs.has_changes == 'true' && steps.find-sdk-pr.outputs.exists != 'true'
         id: pending-deploy
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           echo "Looking for active pending deploy branch..."
 
           # List all branches matching pending-deploy-* pattern
-          PENDING_BRANCHES=$(git ls-remote --heads origin 'refs/heads/pending-deploy-*' | \
-            awk '{print $2}' | \
-            sed 's|refs/heads/||' | \
+          PENDING_BRANCHES=$(gh api "repos/${{ github.repository }}/branches" \
+            --jq '.[] | select(.name | startswith("pending-deploy-")) | .name' | \
             sort --reverse)
 
           if [[ -n "$PENDING_BRANCHES" ]]; then
@@ -342,10 +344,14 @@ jobs:
             PENDING_DEPLOY_BRANCH="pending-deploy-$TIMESTAMP"
             echo "Creating new pending deploy branch: $PENDING_DEPLOY_BRANCH"
 
-            # Create branch from main
-            git fetch origin main
-            git branch "$PENDING_DEPLOY_BRANCH" origin/main
-            git push origin "$PENDING_DEPLOY_BRANCH"
+            # Get the SHA of main branch
+            MAIN_SHA=$(gh api "repos/${{ github.repository }}/git/ref/heads/main" --jq '.object.sha')
+
+            # Create branch via GitHub API
+            gh api "repos/${{ github.repository }}/git/refs" \
+              -X POST \
+              -f ref="refs/heads/$PENDING_DEPLOY_BRANCH" \
+              -f sha="$MAIN_SHA"
           fi
 
           echo "branch=$PENDING_DEPLOY_BRANCH" >> $GITHUB_OUTPUT
