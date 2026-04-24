@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added new audit log actions for MFA management: `ENABLE_MFA_ENFORCEMENT`,
+  `DISABLE_MFA_ENFORCEMENT`, `RESET_USER_MFA`, `ENROLL_USER_MFA`,
+  `REGENERATE_RECOVERY_CODES`.
 - Added GitHub Actions workflow for automatic OpenAPI spec synchronization from
   managed-service. The workflow listens for `repository_dispatch` events,
   fetches the latest OpenAPI spec from managed-service PR branches, regenerates
@@ -16,6 +19,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CHANGELOG.md, and automatically creates or updates pull requests. Supports
   both `openapi-spec-changed` (creates/updates PRs) and `openapi-spec-merged`
   (auto-merges PRs) event types.
+
+### Changed
+
+- Updated `ListInvoices` `start_time` and `end_time` parameter descriptions to
+  specify that values must be in RFC3339 format.
+- Promoted `S3VpcEndpointId` field on `Region` model from Preview to generally
+  available by removing the "Preview:" prefix from its description.
 
 ## [7.1.0] - 2026-04-14
 
