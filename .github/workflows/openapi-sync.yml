@@ -89,7 +89,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ github.token }}
-          persist-credentials: false
 
       # Step 4: Find corresponding SDK PR by searching for trailer
       - name: Find corresponding SDK PR
