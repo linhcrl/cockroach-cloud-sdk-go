@@ -12780,7 +12780,7 @@
           {
             "name": "start_time",
             "in": "query",
-            "description": "start_time filters the response to invoices whose billing period started at or after this time (inclusive).\nDefaults to organization creation time if omitted.",
+            "description": "start_time filters the response to invoices whose billing period started at or after this time (inclusive).\nMust be in RFC3339 format (e.g., 2024-01-01T00:00:00Z). Defaults to organization creation time if omitted.",
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -12789,7 +12789,7 @@
           {
             "name": "end_time",
             "in": "query",
-            "description": "end_time filters the response to invoices whose billing period ended at or before this time (exclusive).\nDefaults to current time if omitted.",
+            "description": "end_time filters the response to invoices whose billing period ended at or before this time (exclusive).\nMust be in RFC3339 format (e.g., 2024-12-31T23:59:59Z). Defaults to current time if omitted.",
             "schema": {
               "type": "string",
               "format": "date-time"
@@ -15388,7 +15388,12 @@
           "AUDIT_LOG_ACTION_UPDATE_CLUSTER_DISRUPTION",
           "AUDIT_LOG_ACTION_SET_CLUSTER_SETTING",
           "AUDIT_LOG_ACTION_EVICT_BYOC_CLUSTER",
-          "AUDIT_LOG_ACTION_MCP_OAUTH_CONSENT"
+          "AUDIT_LOG_ACTION_MCP_OAUTH_CONSENT",
+          "AUDIT_LOG_ACTION_ENABLE_MFA_ENFORCEMENT",
+          "AUDIT_LOG_ACTION_DISABLE_MFA_ENFORCEMENT",
+          "AUDIT_LOG_ACTION_RESET_USER_MFA",
+          "AUDIT_LOG_ACTION_ENROLL_USER_MFA",
+          "AUDIT_LOG_ACTION_REGENERATE_RECOVERY_CODES"
         ]
       },
       "AuditLogEntry": {
@@ -18338,7 +18343,7 @@
             "type": "string"
           },
           "s3_vpc_endpoint_id": {
-            "description": "Preview: s3_vpc_endpoint_id is the ID of the AWS S3 VPC gateway endpoint\nassociated with this cluster region. This can be used to configure\nS3 bucket policies that restrict access to traffic from this\nVPC endpoint. Only populated for Advanced clusters on AWS.",
+            "description": "s3_vpc_endpoint_id is the ID of the AWS S3 VPC gateway endpoint\nassociated with this cluster region. This can be used to configure\nS3 bucket policies that restrict access to traffic from this\nVPC endpoint. Only populated for Advanced clusters on AWS.",
             "type": "string"
           },
           "sql_dns": {
