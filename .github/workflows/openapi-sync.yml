@@ -252,6 +252,8 @@ jobs:
         if: steps.sync.outputs.has_changes == 'true'
         env:
           EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
+          COMMIT_TITLE: ${{ steps.claude.outputs.commit_title }}
+          COMMIT_BODY: ${{ steps.claude.outputs.commit_body }}
         run: |
           # Stage only OpenAPI-generated files
           git add internal/spec/openapi.json \
@@ -260,10 +262,6 @@ jobs:
                   docs/ \
                   README.md \
                   CHANGELOG.md
-
-          # Read commit message components from step outputs
-          COMMIT_TITLE="${{ steps.claude.outputs.commit_title }}"
-          COMMIT_BODY="${{ steps.claude.outputs.commit_body }}"
 
           # Combine title and body
           COMMIT_MSG=$(printf "%s\n\n%s" "$COMMIT_TITLE" "$COMMIT_BODY")
@@ -365,10 +363,9 @@ jobs:
           EXISTING_SDK_PR_EXISTS: ${{ steps.find-sdk-pr.outputs.exists }}
           EXISTING_SDK_PR_NUMBER: ${{ steps.find-sdk-pr.outputs.sdk_pr_number }}
           PENDING_DEPLOY_BRANCH: ${{ steps.pending-deploy.outputs.branch }}
+          PR_TITLE: ${{ steps.claude.outputs.pr_title }}
+          PR_DESCRIPTION: ${{ steps.claude.outputs.pr_description }}
         run: |
-          PR_TITLE="${{ steps.claude.outputs.pr_title }}"
-          PR_DESCRIPTION="${{ steps.claude.outputs.pr_description }}"
-
           FORK_OWNER="linhcrl"
 
           if [[ "$EXISTING_SDK_PR_EXISTS" == "true" ]]; then
