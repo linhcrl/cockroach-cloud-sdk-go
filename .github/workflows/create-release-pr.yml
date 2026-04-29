@@ -17,7 +17,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged && startsWith(github.event.pull_request.head.ref, 'pending-deploy-'))
     uses: cockroachdb/actions/.github/workflows/create-release-pr.yml@v0
     with:
-      fork_owner: FORK_OWNER #TODO(linhcrl): replace
+      fork_owner: linhcrl #TODO(linhcrl): replace
       fork_repo: cockroach-cloud-sdk-go
       build_script: internal/update_version.sh
       files_to_commit: |
