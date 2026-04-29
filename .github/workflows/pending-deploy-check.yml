@@ -117,7 +117,7 @@ jobs:
               *)
                 # Unexpected status (e.g., diverged or other)
                 echo "  ::error::Unexpected comparison status: $compare_status"
-                echo "$sha|$subject|$ms_sha|unexpected status: $compare_status" >> unexpected_status.txt
+                echo "$sha|$subject|$ms_sha|$compare_status" >> unexpected_status.txt
                 ;;
             esac
           done < commits.txt
@@ -201,7 +201,7 @@ jobs:
                 cat >> comment.md <<EOF
           - $subject: \`$sha\`
             - Associated managed-service SHA: \`$ms_sha\`
-            - Unexpected output: \`$output\`
+            - Unexpected status: \`$output\`
 
           EOF
               done < unexpected_status.txt
