@@ -157,8 +157,8 @@ jobs:
 
             while IFS='|' read -r sha subject ms_sha status; do
               cat >> comment.md <<EOF
-          - $subject (\`$sha\`)
-            - Managed-service SHA: \`$ms_sha\`
+          - $subject: \`$sha\`
+            - Associated managed-service SHA: \`$ms_sha\`
 
           EOF
             done < not_deployed.txt
@@ -182,7 +182,7 @@ jobs:
 
               while IFS='|' read -r sha subject; do
                 cat >> comment.md <<EOF
-          - $subject (\`$sha\`)
+          - $subject: \`$sha\`
 
           EOF
               done < missing_trailer.txt
@@ -199,8 +199,8 @@ jobs:
 
               while IFS='|' read -r sha subject ms_sha output; do
                 cat >> comment.md <<EOF
-          - $subject (\`$sha\`)
-            - Managed-service SHA: \`$ms_sha\`
+          - $subject: \`$sha\`
+            - Associated managed-service SHA: \`$ms_sha\`
             - Unexpected output: \`$output\`
 
           EOF
