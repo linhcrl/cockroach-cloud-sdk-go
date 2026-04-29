@@ -1,7 +1,5 @@
 # Update delete later
 
-This is to be deleted after local testing
-
 Another addition that needs to be deleted.
 
 # Go API client for CockroachDB Cloud API
