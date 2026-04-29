@@ -15,6 +15,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `pending-deploy-pr.yml`: Automatically creates PRs from pending deploy branches to main when managed-service deploys
   - `pending-deploy-check.yml`: Validates that SDK commits reference deployed managed-service changes before allowing merge
 
+### Removed
+
+- Remove one section from README
+
 ## [7.1.0] - 2026-04-14
 
 ### Added
