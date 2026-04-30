@@ -1,9 +1,16 @@
 name: Pending Deploy PR
 
 on:
-  repository_dispatch:
-    types: [managed-service-deployed]
   workflow_dispatch:
+    inputs:
+      timestamp:
+        description: 'Deployment timestamp'
+        required: true
+        type: string
+      commit_sha:
+        description: 'Deployed commit SHA'
+        required: true
+        type: string
 
 # Required permissions:
 # - contents:read for checking out code and reading branches/tags
