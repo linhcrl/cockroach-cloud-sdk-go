@@ -35,7 +35,7 @@ jobs:
       MANAGED_SERVICE_TOKEN: ${{ secrets.MANAGED_SERVICE_TOKEN }}
       FORK_OWNER: "linhcrl"
       FORK_PUSH_TOKEN: ${{ secrets.FORK_PUSH_TOKEN }}
-      GITHUB_TOKEN: ${{ github.token }}
+      GITHUB_TOKEN: ${{ secrets.FORK_PUSH_TOKEN }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
