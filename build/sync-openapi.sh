@@ -125,10 +125,17 @@ sync_and_regenerate() {
   SPEC_PATH_IN_MS="console/ui/cc-console/assets/docs/api/latest/openapi.json"
   LOCAL_SPEC_PATH="internal/spec/openapi.json"
 
-  log_info "Fetching openapi.json from $MS_OWNER/$MS_REPO PR #$MS_PR_NUMBER"
+  # Determine which ref to use
+  if [[ -n "${MANAGED_SERVICE_SHA:-}" ]]; then
+    REF="$MANAGED_SERVICE_SHA"
+    log_info "Fetching openapi.json from $MS_OWNER/$MS_REPO at commit $MANAGED_SERVICE_SHA"
+  else
+    REF="refs/pull/$MS_PR_NUMBER/head"
+    log_info "Fetching openapi.json from $MS_OWNER/$MS_REPO PR #$MS_PR_NUMBER"
+  fi
 
   export GH_TOKEN="$MANAGED_SERVICE_TOKEN"
-  gh api "repos/$MS_OWNER/$MS_REPO/contents/$SPEC_PATH_IN_MS?ref=refs/pull/$MS_PR_NUMBER/head" \
+  gh api "repos/$MS_OWNER/$MS_REPO/contents/$SPEC_PATH_IN_MS?ref=$REF" \
     --jq '.content' | base64 --decode > "$LOCAL_SPEC_PATH.new"
 
   if cmp --silent "$LOCAL_SPEC_PATH" "$LOCAL_SPEC_PATH.new"; then
