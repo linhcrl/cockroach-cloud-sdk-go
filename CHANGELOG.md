@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Automated release workflow that creates release PRs when `pending-deploy-*` branches are merged to main, updating the version number in `CHANGELOG.md`, `go.mod`, `internal/spec/config.yaml`, `README.md`, `docs/README.md`, and `pkg/client/configuration.go`
 - Added GitHub Actions workflow for automatic OpenAPI spec synchronization from
   managed-service. The workflow can be manually triggered via `workflow_dispatch`,
   fetches the latest OpenAPI spec from managed-service PR branches, regenerates
