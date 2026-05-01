@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added GitHub Actions workflow for automatic OpenAPI spec synchronization from
+  managed-service. The workflow can be manually triggered via `workflow_dispatch`,
+  fetches the latest OpenAPI spec from managed-service PR branches, regenerates
+  SDK client code, uses Claude AI via Vertex AI to analyze changes and update
+  CHANGELOG.md, and automatically creates or updates pull requests. Supports
+  both `openapi-spec-changed` (creates/updates PRs) and `openapi-spec-merged`
+  (auto-merges PRs) event types.
+
 ## [7.1.0] - 2026-04-14
 
 ### Added
