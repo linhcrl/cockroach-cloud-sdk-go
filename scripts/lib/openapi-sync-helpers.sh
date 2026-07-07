@@ -116,8 +116,10 @@ parse_managed_service_pr_url() {
 
   # Look up PR author so we can request them as a reviewer on the SDK PR.
   # Best-effort: failures here must not abort the sync.
+  # On failure gh prints the error response body to stdout, so discard the
+  # captured value entirely rather than keeping it.
   MS_PR_AUTHOR=$(GH_TOKEN="$MANAGED_SERVICE_TOKEN" \
-    gh api "repos/$MS_OWNER/$MS_REPO/pulls/$MS_PR_NUMBER" --jq '.user.login' || true)
+    gh api "repos/$MS_OWNER/$MS_REPO/pulls/$MS_PR_NUMBER" --jq '.user.login') || MS_PR_AUTHOR=""
   if [[ -n "$MS_PR_AUTHOR" ]]; then
     log_info "Managed-service PR author: $MS_PR_AUTHOR"
   else
@@ -299,6 +301,14 @@ update_changelog() {
   log_info "Resetting CHANGELOG.md to base branch to remove stale entries"
   git checkout "origin/$BASE_BRANCH" -- CHANGELOG.md
 
+  # Pre-generate the diff for Claude to Read. Generating it here (rather than
+  # having Claude run git diff) lets the allowlist drop Bash entirely: the Read
+  # tool pages through large files natively, so Claude doesn't burn turns on
+  # shell pipelines to slice up an oversized diff.
+  log_info "Generating diff files for Claude"
+  git diff --stat "origin/$BASE_BRANCH" > /tmp/openapi-sync-diff-stat.txt
+  git diff "origin/$BASE_BRANCH" > /tmp/openapi-sync-diff.txt
+
   log_info "Setting up Claude CLI..."
   curl --fail --silent --show-error --location https://claude.ai/install.sh | bash -s -- "latest"
   log_info "Claude CLI installed: $(claude --version)"
@@ -311,7 +321,6 @@ update_changelog() {
   export CLAUDE_CODE_USE_VERTEX="1"
   export ANTHROPIC_VERTEX_PROJECT_ID="vertex-model-runners"
   export CLOUD_ML_REGION="us-east5"
-  export BASE_BRANCH
 
   local prompt_file="$SCRIPT_DIR/../.claude/skills/generate-sync-metadata.md"
 
@@ -326,7 +335,7 @@ update_changelog() {
 
   # Call Claude CLI
   # WARNING: Do not modify --allowedTools without security review.
-  # These restrictions sandbox Claude to only edit CHANGELOG.md and run specific git commands.
+  # These restrictions sandbox Claude to reading files and editing CHANGELOG.md only.
   #
   # --output-format stream-json --verbose emits one JSON event per turn (tool
   # call, tool result, assistant message, final result) instead of buffering a
@@ -341,8 +350,8 @@ update_changelog() {
     --model claude-opus-4-6 \
     --output-format stream-json \
     --verbose \
-    --max-turns 15 \
-    --allowedTools "Read,Edit(CHANGELOG.md),Bash(git:diff:*),Bash(printenv BASE_BRANCH),Bash(sed:-n:*)" \
+    --max-turns 30 \
+    --allowedTools "Read,Edit(CHANGELOG.md)" \
     < "$prompt_file" \
     | tee "$output_file" || {
       echo "::endgroup::"

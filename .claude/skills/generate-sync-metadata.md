@@ -1,13 +1,14 @@
 # Generate Sync Metadata
 
-This skill is ONLY for the automated OpenAPI sync workflow (scripts/openapi-sync.sh).
+This skill is ONLY for the automated OpenAPI sync workflow (scripts/openapi-sync-update-changelog.sh).
 Do not use this skill for manual changelog updates or other changelog work.
 
 Analyze the OpenAPI spec sync changes, update CHANGELOG.md, and generate structured metadata (commit title, commit body, PR title, PR description) for the sync.
 
 ## CRITICAL: Source of Truth
 
-**The git diff output is your ONLY source of truth.**
+**The diff file at `/tmp/openapi-sync-diff.txt` is your ONLY source of truth.**
+- `/tmp/openapi-sync-diff-stat.txt` is a file-by-file summary of that same diff, provided only as a navigation aid - do not document anything based on the summary alone
 - Document ONLY what appears in the diff - nothing more, nothing less
 - If something is not in the diff, do NOT document it
 - All changelog entries, commit messages, and PR descriptions must be based ONLY on what you see in the diff
@@ -15,12 +16,8 @@ Analyze the OpenAPI spec sync changes, update CHANGELOG.md, and generate structu
 ## Instructions
 
 **Step 1: View the changes**
-- Run `printenv BASE_BRANCH` and save the exact output value
-- Run `git diff origin/<BASE_BRANCH_VALUE>` where you substitute `<BASE_BRANCH_VALUE>` with the EXACT value from the printenv command
-  - Example: if printenv output "automation/pending-deploy-20260514-043826", run `git diff origin/automation/pending-deploy-20260514-043826`
-  - Example: if printenv output "main", run `git diff origin/main`
-- **DO NOT** run `git diff main` or `git diff origin/main` IF BASE_BRANCH is NOT `main`
-- **DO NOT** run `git log`, `git show`, or any other git command
+- Read `/tmp/openapi-sync-diff-stat.txt` for an overview of which files changed
+- Read `/tmp/openapi-sync-diff.txt` for the full diff. You'll need to read the entire diff to ensure you don't miss any changes. It may be large - use the Read tool's offset and limit parameters to page through it until you have seen all of it, reading as much as you can in each turn to save round trips. Do not stop after the first page.
 
 **Step 2: Update CHANGELOG.md**
 - Follow the changelog conventions documented in CLAUDE.md

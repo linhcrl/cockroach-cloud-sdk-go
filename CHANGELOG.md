@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fix the OpenAPI sync workflow's changelog generation step, which failed on large
+  syncs by pre-generating the git diff instead of having Claude run it.
+
 ## [8.0.0] - 2026-07-06
 
 ### Added
