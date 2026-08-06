@@ -567,3 +567,120 @@ create_or_update_pr() {
     fi
   fi
 }
+
+# Post a comment on the SDK PR explaining why automerge could not complete.
+#
+# Args: $1 - human-readable reason
+post_automerge_failure_comment() {
+  local reason="$1"
+
+  # Never let a comment failure mask the automerge failure it is reporting: this script runs
+  # under `set -e` and the caller still needs to exit non-zero.
+  gh pr comment "$SDK_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --body "$(cat <<EOF
+## Automerge Failed
+
+The managed-service PR has merged and this PR was updated, but it could not be merged into
+\`$BASE_BRANCH\` automatically:
+
+> $reason
+
+Resolve this manually and merge the PR.
+EOF
+)" || log_warning "Could not post automerge failure comment on SDK PR #$SDK_PR_NUMBER"
+}
+
+# Describe why the SDK PR could not be merged.
+#
+# Only accurate once automerge_sdk_pr's retries are exhausted; read earlier it races the force-push.
+#
+# Outputs: a reason on stdout
+describe_unmergeable_pr() {
+  local merge_state
+
+  # Discard stderr: a warning on a successful read would be appended to the status and send every
+  # state to the catch-all.
+  if ! merge_state=$(gh pr view "$SDK_PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+    --json mergeStateStatus --jq '.mergeStateStatus' 2>/dev/null); then
+    echo "GitHub did not report a merge state for the PR."
+    return
+  fi
+
+  case "$merge_state" in
+    DIRTY)
+      echo "The PR conflicts with \`$BASE_BRANCH\` and needs to be rebased onto it."
+      ;;
+    BLOCKED)
+      echo "Branch protection on \`$BASE_BRANCH\` is blocking the merge; a required review or status check is missing."
+      ;;
+    BEHIND)
+      echo "The PR is behind \`$BASE_BRANCH\` and branch protection requires it to be up to date before merging."
+      ;;
+    DRAFT)
+      echo "The PR is still marked as a draft."
+      ;;
+    *)
+      echo "GitHub reported mergeStateStatus \`$merge_state\`."
+      ;;
+  esac
+}
+
+# Rebase-merge the SDK PR into its pending deploy branch.
+#
+# Only runs for openapi-spec-merged events: by this point the managed-service PR has merged, the
+# SDK commit carries the Managed-service-commit-SHA trailer, and the branch has been pushed.
+#
+# Rebase, not squash or merge: pending-deploy-check reads the Managed-service-commit-SHA trailer
+# off every commit in origin/main..<pending deploy branch>, and only rebase replays commit messages
+# verbatim, so it is the only strategy that keeps the trailer intact.
+#
+# Returns: 0 if merged (or already resolved), 1 otherwise
+automerge_sdk_pr() {
+  check_required_env "SDK_PR_NUMBER" "GITHUB_REPOSITORY" "BASE_BRANCH" "GH_TOKEN" || return 1
+
+  local max_attempts=10
+  local retry_seconds=5
+
+  local head_sha
+  head_sha=$(git rev-parse HEAD)
+
+  log_info "Automerging SDK PR #$SDK_PR_NUMBER ($head_sha) into $BASE_BRANCH"
+
+  # Just attempt the merge: GitHub recomputes mergeability asynchronously after our force-push and
+  # serves the previous verdict until it settles, so checking first only reads a stale answer.
+  # --match-head-commit stops a retry merging anything but the commit we pushed.
+  local attempt merge_output pr_status state merge_state head_ref_oid
+  for ((attempt = 1; attempt <= max_attempts; attempt++)); do
+    if merge_output=$(gh pr merge "$SDK_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --rebase \
+      --match-head-commit "$head_sha" 2>&1); then
+      log_info "Merged SDK PR #$SDK_PR_NUMBER into $BASE_BRANCH"
+      return 0
+    fi
+
+    pr_status=$(gh pr view "$SDK_PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+      --json state,mergeStateStatus,headRefOid \
+      --jq '[.state, .mergeStateStatus, .headRefOid] | @tsv' 2>/dev/null || true)
+    IFS=$'\t' read -r state merge_state head_ref_oid <<<"$pr_status"
+
+    # A lost response looks exactly like a failed merge, and the PR may also have been merged by
+    # hand. Either way the work is done, so check before reporting failure.
+    if [[ -n "$state" && "$state" != "OPEN" ]]; then
+      log_info "SDK PR #$SDK_PR_NUMBER is $state; nothing left to merge"
+      return 0
+    fi
+
+    # A conflict needs a human, so stop rather than spend the remaining attempts on it. Only
+    # trusted once headRefOid matches what we pushed; until then the state describes the old head.
+    if [[ "$head_ref_oid" == "$head_sha" && "$merge_state" == "DIRTY" ]]; then
+      log_error "SDK PR #$SDK_PR_NUMBER conflicts with $BASE_BRANCH; not retrying"
+      break
+    fi
+
+    log_info "Merge attempt $attempt/$max_attempts failed: $merge_output"
+    sleep "$retry_seconds"
+  done
+
+  log_error "Could not merge SDK PR #$SDK_PR_NUMBER into $BASE_BRANCH: $merge_output"
+  post_automerge_failure_comment "$(describe_unmergeable_pr)"
+  request_pr_reviewers "$SDK_PR_NUMBER" "${AUTOMERGE_FAILURE_REVIEWERS:-}"
+  return 1
+}

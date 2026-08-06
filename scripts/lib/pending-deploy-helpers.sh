@@ -251,5 +251,8 @@ create_pr_if_not_exists() {
   fi
 
   log_info "Created PR: $pr_url"
+
+  request_pr_reviewers "$(basename "$pr_url")" "${PENDING_DEPLOY_REVIEWERS:-}"
+
   set_output pr_url "$pr_url"
 }

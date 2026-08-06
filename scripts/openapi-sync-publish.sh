@@ -7,6 +7,7 @@ set -euo pipefail
 # 1. Commits changes with generated metadata
 # 2. Pushes to fork
 # 3. Creates or updates SDK PR
+# 4. Rebase-merges the SDK PR into its pending deploy branch (merged events only)
 #
 # Environment variables:
 #   EVENT_TYPE: Type of event triggering the sync (openapi-spec-changed or openapi-spec-merged)
@@ -25,6 +26,7 @@ set -euo pipefail
 #   COMMIT_BODY: Generated commit body (when there are changes)
 #   PR_TITLE: Generated PR title (when there are changes)
 #   PR_DESCRIPTION: Generated PR description (when there are changes)
+#   AUTOMERGE_FAILURE_REVIEWERS: Comma-separated handles to request review from on automerge failure
 
 # Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,6 +50,12 @@ main() {
 
   if [[ "$HAS_CHANGES" == "false" && "$EVENT_TYPE" != "openapi-spec-merged" ]]; then
     log_info "No changes detected after syncing OpenAPI spec and regenerating client"
+  fi
+
+  # Not guarded on HAS_CHANGES: a merged event whose spec is unchanged still amends the commit
+  # to add the Managed-service-commit-SHA trailer, and that trailer has to reach the base branch.
+  if [[ "$EVENT_TYPE" == "openapi-spec-merged" ]]; then
+    automerge_sdk_pr || exit 1
   fi
 
   log_info "=== OpenAPI sync step completed: Publish ==="

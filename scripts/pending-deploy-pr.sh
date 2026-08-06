@@ -10,6 +10,9 @@ set -euo pipefail
 #   GITHUB_TOKEN: GitHub token for creating PRs
 #   GITHUB_REPOSITORY: Repository in owner/repo format
 #   GITHUB_OUTPUT: Path to GitHub Actions output file
+#
+# Optional environment variables:
+#   PENDING_DEPLOY_REVIEWERS: Comma-separated handles to request review from on the created PR
 
 # Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
