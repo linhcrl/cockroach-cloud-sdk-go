@@ -42,11 +42,10 @@ jobs:
 
   # After a successful release, this job ensures there's always a fresh pending deploy
   # branch ready for the next release cycle. It:
-  # 1. Finds the most recently merged pending deploy branch (from PRs to main)
-  # 2. Finds any existing live pending deploy branches
-  # 3. Creates a new pending deploy branch if there are no live ones or if the live
-  #    ones are stale (associated with an older date than the last merged one)
-  # 4. Retargets all open PRs to point to the current pending deploy branch
+  # 1. Finds any existing live pending deploy branches
+  # 2. Creates a new pending deploy branch if there are no live ones, or if the live
+  #    one is already fully contained in main (meaning its contents have shipped)
+  # 3. Retargets all open PRs to point to the current pending deploy branch
   manage-pending-deploy:
     needs: release
     if: needs.release.outputs.tag_created == 'true'
@@ -56,41 +55,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Step 1: Determine the previous pending deploy branch timestamp from main
-      # Find the most recent merged PR to main where the head branch was automation/pending-deploy-YYYYMMDD-hhmmss
-      - name: Find previous pending deploy branch from merged PRs
-        id: previous
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          source scripts/lib/actions-helpers.sh
-
-          log_info "Searching for previous pending deploy branch from merged PRs..."
-
-          # Fetch last 50 merged PRs to find the most recent pending deploy branch.
-          # 50 should be sufficient given typical API change and SDK release cadence.
-          previous_branch=$(gh pr list \
-            --state merged \
-            --base main \
-            --limit 50 \
-            --json headRefName,mergedAt \
-            --jq '[.[] | select(.headRefName | test("^automation/pending-deploy-[0-9]{8}-[0-9]{6}$"))] | sort_by(.mergedAt) | reverse | .[0].headRefName')
-
-          if [ -z "$previous_branch" ] || [ "$previous_branch" = "null" ]; then
-            log_info "No previous pending deploy branch found from merged PRs"
-            set_output previous_branch_timestamp ""
-          else
-            log_info "Found previous pending deploy branch: $previous_branch"
-
-            # Extract timestamp from the branch name: automation/pending-deploy-YYYYMMDD-hhmmss
-            previous_branch_timestamp=$(echo "$previous_branch" | sed --regexp-extended 's/^automation\/pending-deploy-([0-9]{8}-[0-9]{6})$/\1/' | tr --delete '-')
-
-            set_output previous_branch_timestamp "$previous_branch_timestamp"
-
-            log_info "  Timestamp: $previous_branch_timestamp"
-          fi
-
-      # Step 2: Determine the current live pending deploy branch in the main repository
+      # Determine the current live pending deploy branch in the main repository
       # Look for live remote branches matching automation/pending-deploy-YYYYMMDD-hhmmss
       # If multiple exist, select the one with the latest timestamp
       - name: Find current live pending deploy branch
@@ -108,28 +73,18 @@ jobs:
 
           if [ -z "$current_branch" ]; then
             log_info "No live pending deploy branch found"
-            set_output current_branch ""
-            set_output current_branch_timestamp ""
           else
             log_info "Found current live pending deploy branch: $current_branch"
-
-            # Extract timestamp
-            current_branch_timestamp=$(echo "$current_branch" | sed --regexp-extended 's/^automation\/pending-deploy-([0-9]{8}-[0-9]{6})$/\1/' | tr --delete '-')
-
-            set_output current_branch "$current_branch"
-            set_output current_branch_timestamp "$current_branch_timestamp"
-
-            log_info "  Timestamp: $current_branch_timestamp"
           fi
 
-      # Step 3: Decide which pending deploy branch should be used now
-      # If previous timestamp >= current timestamp, create a new branch
+          set_output current_branch "$current_branch"
+
+      # Decide which pending deploy branch should be used now
+      # A branch fully contained in main has already shipped, so it is spent
       - name: Select pending deploy branch
         id: selected
         env:
-          PREVIOUS_BRANCH_TIMESTAMP: ${{ steps.previous.outputs.previous_branch_timestamp }}
           CURRENT_BRANCH: ${{ steps.current.outputs.current_branch }}
-          CURRENT_BRANCH_TIMESTAMP: ${{ steps.current.outputs.current_branch_timestamp }}
         run: |
           source scripts/lib/actions-helpers.sh
 
@@ -137,20 +92,16 @@ jobs:
           current_timestamp=$(date --utc +%Y%m%d-%H%M%S)
           log_info "Current UTC timestamp: $current_timestamp"
 
-          # Decision logic: create new branch if previous >= current, otherwise use current
           if [ -z "$CURRENT_BRANCH" ]; then
-            # No current live branch exists, create new
             log_info "No current live branch exists, creating new branch..."
             selected_branch="automation/pending-deploy-${current_timestamp}"
             needs_creation=true
-          elif [ -n "$PREVIOUS_BRANCH_TIMESTAMP" ] && [ "$PREVIOUS_BRANCH_TIMESTAMP" -ge "$CURRENT_BRANCH_TIMESTAMP" ]; then
-            # Previous timestamp >= current timestamp, create new branch
-            log_info "Previous timestamp ($PREVIOUS_BRANCH_TIMESTAMP) >= current timestamp ($CURRENT_BRANCH_TIMESTAMP), creating new branch..."
+          elif git merge-base --is-ancestor "origin/$CURRENT_BRANCH" origin/main; then
+            log_info "$CURRENT_BRANCH is fully merged into main, creating new branch..."
             selected_branch="automation/pending-deploy-${current_timestamp}"
             needs_creation=true
           else
-            # Use current live branch
-            log_info "Using current live branch"
+            log_info "$CURRENT_BRANCH has commits not yet in main, continuing to use it"
             selected_branch="$CURRENT_BRANCH"
             needs_creation=false
           fi
@@ -161,7 +112,7 @@ jobs:
           set_output selected_branch "$selected_branch"
           set_output needs_creation "$needs_creation"
 
-      # Step 4: Ensure the selected pending deploy branch exists in the main repository
+      # Ensure the selected pending deploy branch exists in the main repository
       # Create it from main if it doesn't already exist remotely
       - name: Create pending deploy branch if needed
         if: steps.selected.outputs.needs_creation == 'true'
@@ -178,7 +129,7 @@ jobs:
 
           log_info "Branch $SELECTED_BRANCH created and pushed to origin"
 
-      # Step 5: Retarget open PRs from any pending deploy branch to the selected branch
+      # Retarget open PRs from any pending deploy branch to the selected branch
       - name: Retarget open PRs
         env:
           GH_TOKEN: ${{ github.token }}
